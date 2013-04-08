@@ -142,3 +142,12 @@ def fetch_all():
             catalog_url)]
         dataset_dict[catalog_url] = datasets
     return dataset_dict
+
+
+def array_by_variable(dataset, var_name):
+    # put it in a pandas timeseries
+    if var_name not in dataset.keys():
+        print "variable '%s' not found in dataset" % var_name
+        return
+    var_names = [v for v in dataset.keys() if var_name in v]
+    pass
