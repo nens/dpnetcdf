@@ -8,11 +8,9 @@ from django.contrib.gis.geos import Point
 from django.utils.translation import ugettext_lazy as _
 
 from dpnetcdf.models import (OpendapCatalog, OpendapSubcatalog, OpendapDataset,
-                             Variable)
+                             Variable, MapLayer, Datasource, Geometry, Value,
+                             Style)
 from dpnetcdf.opendap import parse_dataset_properties, get_dataset
-from dpnetcdf.models import Datasource
-from dpnetcdf.models import Geometry
-from dpnetcdf.models import Value
 from dpnetcdf.utils import parse_opendap_dataset_name
 
 
@@ -86,9 +84,34 @@ class ValueAdmin(admin.ModelAdmin):
     list_filter = ['datasource']
 
 
+class MapLayerAdmin(admin.ModelAdmin):
+    list_display = ['parameter', 'nr_of_datasources', 'nr_of_styles']
+    filter_horizontal = ('datasources', 'styles')
+
+    def nr_of_datasources(self, obj):
+        """Return number of datasources."""
+        return obj.datasources.count()
+    nr_of_datasources.allow_tags=False
+    nr_of_datasources.short_description = _("datasources")
+
+    def nr_of_styles(self, obj):
+        """Return number of styles."""
+        return obj.styles.count()
+    nr_of_styles.allow_tags=False
+    nr_of_styles.short_description = _("styles")
+
+    class Media:
+        css = {
+            'all': ('dpnetcdf/css/custom_admin.css',)
+        }
+
+
 admin.site.register(OpendapCatalog)
 admin.site.register(OpendapSubcatalog, OpendapSubcatalogAdmin)
 admin.site.register(OpendapDataset, OpendapDatasetAdmin)
 admin.site.register(Variable)
 admin.site.register(Value, ValueAdmin)
 admin.site.register(Geometry)
+admin.site.register(MapLayer, MapLayerAdmin)
+admin.site.register(Style)
+admin.site.register(Datasource)

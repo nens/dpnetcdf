@@ -25,8 +25,8 @@ class OpendapCatalog(models.Model):
     http_url = models.CharField(max_length=100)
 
     class Meta:
-        verbose_name = _("opendap catalog")
-        verbose_name_plural = _("opendap catalogs")
+        verbose_name = _("catalog")
+        verbose_name_plural = _("catalogs")
 
     def __unicode__(self):
         if self.name:
@@ -44,6 +44,10 @@ class OpendapSubcatalog(models.Model):
         cat = self.catalog
         return urlify(cat.base_url, cat.catalog_url, cat.service_prefix,
                       self.identifier, 'catalog.xml')
+
+    class Meta:
+        verbose_name = _("subcatalog")
+        verbose_name_plural = _("subcatalogs")
 
     def __unicode__(self):
         return "%s::%s" % (self.catalog, self.identifier)
@@ -104,11 +108,11 @@ class OpendapDataset(models.Model):
         return var_names
 
     class Meta:
-        verbose_name = _("opendap dataset")
-        verbose_name_plural = _("opendap datasets")
+        verbose_name = _("dataset")
+        verbose_name_plural = _("datasets")
 
     def __unicode__(self):
-        return "%s - %s" % (self.catalog, self.name)
+        return self.name
 
 
 class Style(models.Model):
@@ -124,7 +128,7 @@ class Style(models.Model):
 
 
 class Geometry(models.Model):
-    """Base geometry field for holding points, lines, etc."""
+    """Base geometry field primarily for holding points, lines, etc."""
     geometry = GeometryField()
 
     class Meta:
@@ -141,10 +145,10 @@ class Datasource(models.Model):
     variable = models.ForeignKey('Variable', null=True)
     imported = models.DateTimeField(blank=True, null=True)
 
-    geometries = models.ManyToManyField('Geometry')
+    geometries = models.ManyToManyField('Geometry', blank=True)
 
     class Meta:
-        verbose_name = _("datsource")
+        verbose_name = _("datasource")
         verbose_name_plural = _("datasources")
 
     def __unicode__(self):
@@ -155,15 +159,15 @@ class MapLayer(models.Model):
     # Parameter can be something like waterstand_actueel or chloride. It is
     # the identifier for this map layer.
     parameter = models.CharField(max_length=100, blank=True)
-    datasources = models.ManyToManyField(Datasource)
-    styles = models.ManyToManyField(Style)
+    datasources = models.ManyToManyField(Datasource, blank=True)
+    styles = models.ManyToManyField(Style, blank=True)
 
     class Meta:
-        verbose_name = _("map layer")
-        verbose_name_plural = _("map layers")
+        verbose_name = _("maplayer")
+        verbose_name_plural = _("maplayers")
 
     def __unicode__(self):
-        pass
+        return self.parameter
 
 
 class Value(models.Model):
@@ -179,4 +183,4 @@ class Value(models.Model):
         ordering = ('geometry',)
 
     def __unicode__(self):
-        return "%s - %s - %s" % (self.datasource, self.geometry, self.value)
+        return "%s - %s: %s" % (self.datasource, self.geometry, self.value)
