@@ -9,7 +9,7 @@ from django.utils.translation import ugettext_lazy as _
 
 from dpnetcdf.models import (OpendapCatalog, OpendapSubcatalog, OpendapDataset,
                              Variable, MapLayer, Datasource, Geometry, Value,
-                             Style)
+                             Style, ShapeFile)
 from dpnetcdf.opendap import parse_dataset_properties, get_dataset
 from dpnetcdf.utils import parse_opendap_dataset_name
 
@@ -100,6 +100,24 @@ class MapLayerAdmin(admin.ModelAdmin):
     nr_of_styles.allow_tags=False
     nr_of_styles.short_description = _("styles")
 
+    def push_to_geoserver(self, request, queryset):
+        for obj in queryset:
+            # upload to geoserver, how?
+            # steps:
+            # - check for workspace 'deltaportaal', if it does not exist,
+            #   create it: client.create_workspace(workspace)
+            # - check for datastore 'deltaportaal', if it does not exist,
+            #   create it with the correct connection parameters (from django.conf.settings?):
+            #   client.create_datastore(workspace, datastore, connection_parameters)
+            # - create feature type (or layer), based on this map layer with
+            #   the correct sql query:
+            #   client.create_feature_type(workspace, datastore, view, sql_query)
+            # - create or update style(s) and connect it to this view:
+            #   client.create_style(style, style_file)
+            #   client.set_default_style(workspace, datastore, view, style)
+            pass
+    push_to_geoserver.short_description = _("Push to geoserver")
+
     class Media:
         css = {
             'all': ('dpnetcdf/css/custom_admin.css',)
@@ -115,3 +133,4 @@ admin.site.register(Geometry)
 admin.site.register(MapLayer, MapLayerAdmin)
 admin.site.register(Style)
 admin.site.register(Datasource)
+admin.site.register(ShapeFile)

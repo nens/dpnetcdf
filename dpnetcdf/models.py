@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 from __future__ import print_function
+from django.conf import settings
 
 from django.contrib.gis.db.models import GeometryField
 from django.db import models
@@ -139,6 +140,23 @@ class Geometry(models.Model):
         return unicode(self.geometry)
 
 
+def get_shape_file_upload_dir(instance, filename):
+    upload_dir = "%s/%s" % (settings.MEDIA_ROOT, filename)
+    return upload_dir
+
+
+class ShapeFile(models.Model):
+    name = models.CharField(max_length=255)
+    shape_file = models.FileField(upload_to=get_shape_file_upload_dir)
+
+    class Meta:
+        verbose_name = _("shapefile")
+        verbose_name_plural = _("shapefiles")
+
+    def __unicode__(self):
+        return self.name
+
+
 class Datasource(models.Model):
     dataset = models.ForeignKey('OpendapDataset', null=True)
     # the specific variable from the dataset
@@ -157,7 +175,7 @@ class Datasource(models.Model):
 
 class MapLayer(models.Model):
     # Parameter can be something like waterstand_actueel or chloride. It is
-    # the identifier for this map layer.
+    # the identifier for this map layer and the geoserver layer name.
     parameter = models.CharField(max_length=100, blank=True)
     datasources = models.ManyToManyField(Datasource, blank=True)
     styles = models.ManyToManyField(Style, blank=True)
