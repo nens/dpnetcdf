@@ -13,10 +13,13 @@ from dpnetcdf.opendap import parse_dataset_properties, get_dataset
 from dpnetcdf.models import Datasource
 from dpnetcdf.models import Geometry
 from dpnetcdf.models import Value
+from dpnetcdf.utils import parse_opendap_dataset_name
 
 
 class OpendapDatasetAdmin(admin.ModelAdmin):
-    list_display = ('catalog', 'url', 'name', 'date')
+    list_display = ('catalog', 'name', 'date')
+    list_filter = ['catalog']
+    search_fields = ['name']
     readonly_fields = ('variables',)
 
     actions = ['load_variables', 'load_current_waterlevel']
@@ -49,8 +52,8 @@ class OpendapDatasetAdmin(admin.ModelAdmin):
                 point = Point(x_values[i], y_values[i])
                 geometry, _created = Geometry.objects.get_or_create(
                     geometry=point)
-                Value.objects.get_or_create(datasource=datasource,
-                    geometry=geometry, value=values[i])
+                Value.objects.get_or_create(
+                    datasource=datasource, geometry=geometry, value=values[i])
 
 
 class OpendapSubcatalogAdmin(admin.ModelAdmin):
@@ -63,9 +66,14 @@ class OpendapSubcatalogAdmin(admin.ModelAdmin):
             datasets_properties = parse_dataset_properties(obj.url)
             count = 0
             for props in datasets_properties:
+                nf = parse_opendap_dataset_name(props['name'])
+                defaults = {
+                    'time_zero': nf[0], 'program': nf[1], 'strategy': nf[2],
+                    'year': nf[3], 'scenario': nf[4],
+                    'calculation_facility': nf[5], 'date': props['timestamp']}
                 dataset, _created = OpendapDataset.objects.get_or_create(
                     catalog=obj, url=props['urlpath'], name=props['name'],
-                    defaults={'date': props['timestamp']})
+                    defaults=defaults)
                 if _created:
                     count += 1
             msg = _("Created %s datasets for %s" % (count, obj.url))
@@ -73,9 +81,14 @@ class OpendapSubcatalogAdmin(admin.ModelAdmin):
     load_datasets.short_description = _("Load related datasets")
 
 
+class ValueAdmin(admin.ModelAdmin):
+    list_display = ('datasource', 'geometry', 'value')
+    list_filter = ['datasource']
+
+
 admin.site.register(OpendapCatalog)
 admin.site.register(OpendapSubcatalog, OpendapSubcatalogAdmin)
 admin.site.register(OpendapDataset, OpendapDatasetAdmin)
 admin.site.register(Variable)
-admin.site.register(Value)
+admin.site.register(Value, ValueAdmin)
 admin.site.register(Geometry)
