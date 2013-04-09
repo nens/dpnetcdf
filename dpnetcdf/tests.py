@@ -5,8 +5,52 @@ from __future__ import print_function
 
 from django.test import TestCase
 
+from dpnetcdf.utils import parse_opendap_dataset_name
 
-class ExampleTest(TestCase):
 
-    def test_something(self):
-        self.assertEquals(1, 1)
+TEST_DATA = {
+    # key is input name, value is expected result after name is parsed
+    '200506010000_DPR_maas_S0v1_2015_RF1p0p3.nc': [
+        '200506010000', 'DPR_maas', 'S0v1', '2015', '', 'RF1p0p3'],
+    '200506010000_DPR_maas_S0v1_2050G_RF1p0p3.nc': [
+        '200506010000', 'DPR_maas', 'S0v1', '2050G', '', 'RF1p0p3'],
+    '200506010000_DPR_maas_S0v1_2100G_RF1p0p3.nc': [
+        '200506010000', 'DPR_maas', 'S0v1', '2100G', '', 'RF1p0p3'],
+    '200506010000_DPR_maas_S0v1_2100W_RF1p0p3.nc': [
+        '200506010000', 'DPR_maas', 'S0v1', '2100W', '', 'RF1p0p3'],
+    '200506010000_DPR_rijn_S0v1_2015_RF1p0p3.nc': [
+        '200506010000', 'DPR_rijn', 'S0v1', '2015', '', 'RF1p0p3'],
+    '200506010000_DPR_rijn_S0v1_2050G_RF1p0p3.nc': [
+        '200506010000', 'DPR_rijn', 'S0v1', '2050G', '', 'RF1p0p3'],
+    '200506010000_DPR_rijn_S0v1_2100G_RF1p0p3.nc': [
+        '200506010000', 'DPR_rijn', 'S0v1', '2100G', '', 'RF1p0p3'],
+    '200506010000_DPR_rijn_S0v1_2100W_RF1p0p3.nc': [
+        '200506010000', 'DPR_rijn', 'S0v1', '2100W', '', 'RF1p0p3'],
+    '199101060440_DPRD_S0v1_2015_RF1p0.nc': [
+        '199101060440', 'DPRD', 'S0v1', '2015', '', 'RF1p0'],
+    '199101060440_DPRD_S0v1_2015_RF1p0p3.nc': [
+        '199101060440', 'DPRD', 'S0v1', '2015', '', 'RF1p0p3'],
+    '199101060440_DPRD_S0v1_2050_RD_RF1p0p2.nc': [
+        '199101060440', 'DPRD', 'S0v1', '2050', 'RD', 'RF1p0p2'],
+    '199101060440_DPRD_S0v1_2050_RD_RF1p0p3.nc': [
+        '199101060440', 'DPRD', 'S0v1', '2050', 'RD', 'RF1p0p3'],
+    '199101060440_DPRD_S0v1_2050_SW_RF1p0p2.nc': [
+        '199101060440', 'DPRD', 'S0v1', '2050', 'SW', 'RF1p0p2'],
+    '199101060440_DPRD_S0v1_2050_SW_RF1p0p3.nc': [
+        '199101060440', 'DPRD', 'S0v1', '2050', 'SW', 'RF1p0p3'],
+    '199101060440_DPRD_S0v1_2100_RD_RF1p0p2.nc': [
+        '199101060440', 'DPRD', 'S0v1', '2100', 'RD', 'RF1p0p2'],
+    '199101060440_DPRD_S0v1_2100_RD_RF1p0p3.nc': [
+        '199101060440', 'DPRD', 'S0v1', '2100', 'RD', 'RF1p0p3'],
+    '199101060440_DPRD_S0v1_2100_SW_RF1p0p2.nc': [
+        '199101060440', 'DPRD', 'S0v1', '2100', 'SW', 'RF1p0p2'],
+    '199101060440_DPRD_S0v1_2100_SW_RF1p0p3.nc': [
+        '199101060440', 'DPRD', 'S0v1', '2100', 'SW', 'RF1p0p3']
+}
+
+class OpendapTests(TestCase):
+
+    def test_name_parsing(self):
+        for name, expected in TEST_DATA.items():
+            result = parse_opendap_dataset_name(name)
+            self.assertEquals(expected, result)
