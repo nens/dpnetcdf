@@ -177,8 +177,12 @@ class MapLayer(models.Model):
     # Parameter can be something like waterstand_actueel or chloride. It is
     # the identifier for this map layer and the geoserver layer name.
     parameter = models.CharField(max_length=100, blank=True)
+    # TODO: check whether datasources datasets should be of the same origin
     datasources = models.ManyToManyField(Datasource, blank=True)
     styles = models.ManyToManyField(Style, blank=True)
+    # sql query for geoserver
+    sql_query = models.TextField(blank=True)
+    # TODO: consider adding a maplayer status field, e.g. created_geo_table
 
     class Meta:
         verbose_name = _("maplayer")

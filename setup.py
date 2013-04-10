@@ -21,6 +21,8 @@ install_requires = [
     'django-appconf',
     'lxml',
     'ipdb',
+    'sqlalchemy',
+    'geoalchemy',
     ],
 
 tests_require = [

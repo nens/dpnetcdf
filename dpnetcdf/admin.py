@@ -12,6 +12,8 @@ from dpnetcdf.models import (OpendapCatalog, OpendapSubcatalog, OpendapDataset,
                              Style, ShapeFile)
 from dpnetcdf.opendap import parse_dataset_properties, get_dataset
 from dpnetcdf.utils import parse_opendap_dataset_name
+from geoserverlib.client import GeoserverClient
+from dpnetcdf.alchemy import create_geo_table
 
 
 class OpendapDatasetAdmin(admin.ModelAdmin):
@@ -35,6 +37,7 @@ class OpendapDatasetAdmin(admin.ModelAdmin):
 
     def load_current_waterlevel(self, request, queryset):
         """Test method for loading dataset data."""
+        # TODO: make this dynamic: let user choose which variable to use
         var_name = 'waterstand_actueel'
         for obj in queryset:
             # load x,y and value data
@@ -88,6 +91,8 @@ class MapLayerAdmin(admin.ModelAdmin):
     list_display = ['parameter', 'nr_of_datasources', 'nr_of_styles']
     filter_horizontal = ('datasources', 'styles')
 
+    actions = ['push_to_geoserver']
+
     def nr_of_datasources(self, obj):
         """Return number of datasources."""
         return obj.datasources.count()
@@ -101,9 +106,19 @@ class MapLayerAdmin(admin.ModelAdmin):
     nr_of_styles.short_description = _("styles")
 
     def push_to_geoserver(self, request, queryset):
+        # TODO: put geoserver connenction data in settings or DB
+        gs = GeoserverClient('localhost', 8123, 'admin', 'geoserver')
+        workspace = 'deltaportaal'
         for obj in queryset:
             # upload to geoserver, how?
             # steps:
+            # - create column definitions based on the datasources variables
+            datasources = obj.datasources()
+            columns = []
+            # - create intermediate table with SQLAlchemy
+            Table = create_geo_table(obj.parameter)
+            # - fill this table with the right values
+
             # - check for workspace 'deltaportaal', if it does not exist,
             #   create it: client.create_workspace(workspace)
             # - check for datastore 'deltaportaal', if it does not exist,
