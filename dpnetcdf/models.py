@@ -100,8 +100,12 @@ class OpendapDataset(models.Model):
 
     def update_variables(self):
         dataset = get_dataset(self.dataset_url)
-        # TODO: make variable 'mapper' more future proof
-        var_names = [v for v in dataset.keys() if 'actueel' in v]
+        # TODO: make variable 'mapper' more future proof by using exlusion
+        # variables:
+        # see http://opendap-dm1.knmi.nl:8080/thredds/dodsC/deltamodel/Deltaportaal/DPRD/199101060440_DPRD_S0v1_2100_SW_RF1p0p3.nc.html
+        excluded_variables = ['time', 'analysis_time', 'lat', 'lon', 'x', 'y',
+                               'station_id', 'station_names']
+        var_names = [v for v in dataset.keys() if v not in excluded_variables]
         for var_name in var_names:
             var, _created = Variable.objects.get_or_create(name=var_name)
             if _created:
@@ -162,7 +166,7 @@ class Datasource(models.Model):
     # the specific variable from the dataset
     variable = models.ForeignKey('Variable', null=True)
     imported = models.DateTimeField(blank=True, null=True)
-
+    # TODO: delete it?
     geometries = models.ManyToManyField('Geometry', blank=True)
 
     class Meta:

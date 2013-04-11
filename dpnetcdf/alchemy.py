@@ -30,13 +30,14 @@ class ColumnMaker(object):
         return Column(name, Integer, primary_key=True)
 
     def _float_column(self, name, *args, **kwargs):
-        return Column(name, Float)
+        return Column(name, Float, nullable=kwargs.get('nullable', False))
 
     def _integer_column(self, name, *args, **kwargs):
-        return Column(name, Integer)
+        return Column(name, Integer, nullable=kwargs.get('nullable', False))
 
     def _string_column(self, name, max_length, *args, **kwargs):
-        return Column(name, Unicode(max_length))
+        return Column(name, Unicode(max_length),
+                      nullable=kwargs.get('nullable', False))
 
     def _point_column(self, name, *args, **kwargs):
         return GeometryExtensionColumn(
@@ -62,12 +63,14 @@ def create_geo_table(table_name, *extra_columns):
     columns = [
         cm.create({'type': 'pk', 'name': 'id'}),
         cm.create({'type': 'point', 'name': 'geom'}),
-        cm.create({'type': 'string', 'name': 'year', 'max_length': 6}),
-        cm.create({'type': 'string', 'name': 'scenario', 'max_length': 2}),
+        cm.create({'type': 'string', 'name': 'zichtjaar', 'max_length': 6}),
+        cm.create({'type': 'string', 'name': 'scenario', 'max_length': 2,
+                   'nullable': True}),
     ]
     for col_data in extra_columns:
         columns.append(cm.create(col_data))
-    geo_table = Table(table_name, metadata, *tuple(columns),
+    columns = tuple(set(columns))
+    geo_table = Table(table_name, metadata, *columns,
                       extend_existing=True)
     GeometryDDL(geo_table)
     metadata.create_all()
@@ -79,10 +82,13 @@ def create_geo_table(table_name, *extra_columns):
 
 def test(nr=1):
     table_name = 'geo_table_%s' % nr
-    TableClass = create_geo_table(table_name)
+    extra_columns = [
+        {'type': 'float', 'name': 'waterstand_actueel', 'nullable': True}
+    ]
+    TableClass = create_geo_table(table_name, *extra_columns)
     t = TableClass()
     t.geom = 'POINT(-88.5945861592357 42.9480095987261)'
-    t.year = '2015'
+    t.zichtjaar = '2015'
     t.scenario = 'RD'
     session.add(t)
     session.commit()

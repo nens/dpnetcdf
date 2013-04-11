@@ -2,18 +2,20 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 from __future__ import print_function
+from collections import defaultdict
 
 from django.contrib import admin, messages
 from django.contrib.gis.geos import Point
 from django.utils.translation import ugettext_lazy as _
+
+from geoserverlib.client import GeoserverClient
 
 from dpnetcdf.models import (OpendapCatalog, OpendapSubcatalog, OpendapDataset,
                              Variable, MapLayer, Datasource, Geometry, Value,
                              Style, ShapeFile)
 from dpnetcdf.opendap import parse_dataset_properties, get_dataset
 from dpnetcdf.utils import parse_opendap_dataset_name
-from geoserverlib.client import GeoserverClient
-from dpnetcdf.alchemy import create_geo_table
+from dpnetcdf.alchemy import create_geo_table, session, metadata, engine
 
 
 class OpendapDatasetAdmin(admin.ModelAdmin):
@@ -91,7 +93,7 @@ class MapLayerAdmin(admin.ModelAdmin):
     list_display = ['parameter', 'nr_of_datasources', 'nr_of_styles']
     filter_horizontal = ('datasources', 'styles')
 
-    actions = ['push_to_geoserver']
+    actions = ['publish_to_geoserver']
 
     def nr_of_datasources(self, obj):
         """Return number of datasources."""
@@ -105,33 +107,97 @@ class MapLayerAdmin(admin.ModelAdmin):
     nr_of_styles.allow_tags=False
     nr_of_styles.short_description = _("styles")
 
-    def push_to_geoserver(self, request, queryset):
+    def publish_to_geoserver(self, request, queryset):
         # TODO: put geoserver connenction data in settings or DB
         gs = GeoserverClient('localhost', 8123, 'admin', 'geoserver')
         workspace = 'deltaportaal'
         for obj in queryset:
-            # upload to geoserver, how?
-            # steps:
+            # upload to geoserver, steps:
             # - create column definitions based on the datasources variables
-            datasources = obj.datasources()
-            columns = []
+            variable_names = set()
+            variable_columns = []
+            datasources = obj.datasources.all()
+            for datasource in datasources:
+                variable = datasource.variable
+                variable_names.add(variable.name)
+                for variable_name in variable_names:
+                    column_definition = {
+                        'type': 'float', 'name': variable_name,
+                        'nullable': True}
+                    variable_columns.append(column_definition)
             # - create intermediate table with SQLAlchemy
-            Table = create_geo_table(obj.parameter)
-            # - fill this table with the right values
+            Table = create_geo_table(obj.parameter, *variable_columns)
+            # - fill this table with the correct values
+            raw_rows = defaultdict(dict)
+            for datasource in datasources:
+                # make fill_value NULL in database
+                ds = get_dataset(datasource.dataset.dataset_url)
+                year = datasource.dataset.year
+                scenario = datasource.dataset.scenario
+                variable_name = datasource.variable.name
+                fill_value = ds[variable_name].attributes.get(
+                    '_FillValue')
+                x_values = ds['x'][:]  # [:] loads the data
+                y_values = ds['y'][:]
+                values = ds[variable_name][:]
+                # create insertable rows
+                for i in range(len(x_values)):
+                    point = Point(x_values[i], y_values[i])
+                    # point.set_srid(28992)  # RD srid (lizard_map/coordinates)
+                    value = values[i]
+                    if value == fill_value:
+                        value = None
+                    row_key = (point.wkt, year, scenario)
+                    raw_rows[row_key][variable_name] = value
+            inserts = []
+            for row_key, variables in raw_rows.items():
+                wkt_point, year, scenario = row_key
+                t = Table()
+                t.geom = wkt_point
+                t.zichtjaar = year
+                t.scenario = scenario
+                # add variables
+                for var, value in variables.items():
+                    if value is not None:
+                        value = float(value)  # to cast a numpy.float32 to float
+                    setattr(t, var, value)
+                inserts.append(t)
+            # delete existing data from table
+            tbl = metadata.tables[obj.parameter]
+            con = engine.connect()
+            con.execute(tbl.delete())
+            # now commit the data
+            session.add_all(inserts)
+            session.commit()
 
+            # now upload settings to geoserver:
             # - check for workspace 'deltaportaal', if it does not exist,
-            #   create it: client.create_workspace(workspace)
+            #   create it:
+            gs.create_workspace(workspace)
             # - check for datastore 'deltaportaal', if it does not exist,
             #   create it with the correct connection parameters (from django.conf.settings?):
-            #   client.create_datastore(workspace, datastore, connection_parameters)
+            datastore = 'dpnetcdf'
+            connection_parameters = {
+                'host': '192.168.20.11',
+                'port': '5432',
+                'database': 'dpgeo',
+                'user': 'buildout',
+                'passwd': 'buildout',
+                'dbtype': 'postgis'
+            }
+            gs.create_datastore(workspace, datastore, connection_parameters)
             # - create feature type (or layer), based on this map layer with
             #   the correct sql query:
-            #   client.create_feature_type(workspace, datastore, view, sql_query)
+            sql_query = 'SELECT * FROM %s' % obj.parameter
+            view = obj.parameter
+            gs.create_feature_type(workspace, datastore, view, sql_query)
             # - create or update style(s) and connect it to this view:
-            #   client.create_style(style, style_file)
-            #   client.set_default_style(workspace, datastore, view, style)
-            pass
-    push_to_geoserver.short_description = _("Push to geoserver")
+            style = obj.styles.all()[0]
+            style_name = style.name
+            style_xml = style.xml.strip()
+            gs.create_style(style_name, style_data=style_xml)
+            gs.set_default_style(workspace, datastore, view, style_name)
+    publish_to_geoserver.short_description = _("Publish to geoserver")
 
     class Media:
         css = {
