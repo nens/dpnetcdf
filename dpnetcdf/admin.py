@@ -3,6 +3,7 @@
 from __future__ import unicode_literals
 from __future__ import print_function
 from collections import defaultdict
+from django.conf import settings
 
 from django.contrib import admin, messages
 from django.contrib.gis.geos import Point
@@ -186,14 +187,7 @@ class MapLayerAdmin(admin.ModelAdmin):
             #   create it with the correct connection parameters (from django.conf.settings?):
             datastore = 'dpnetcdf'
             # TODO; set connection_parameters in django settings
-            connection_parameters = {
-                'host': '192.168.20.11',
-                'port': '5432',
-                'database': 'dpgeo',
-                'user': 'buildout',
-                'passwd': 'buildout',
-                'dbtype': 'postgis'
-            }
+            connection_parameters = settings.GEO_DATABASE_CONFIG
             gs.create_datastore(workspace, datastore, connection_parameters)
             # - create feature type (or layer), based on this map layer with
             #   the correct sql query:
@@ -203,11 +197,14 @@ class MapLayerAdmin(admin.ModelAdmin):
             # recalculate native and lat/lon bounding boxes
             gs.recalculate_bounding_boxes(workspace, datastore, view)
             # - create or update style(s) and connect it to this view:
-            style = obj.styles.all()[0]
-            style_name = style.name
-            style_xml = style.xml.strip()
-            gs.create_style(style_name, style_data=style_xml)
-            # set default style to point for now, while developing
+            styles = obj.styles.all()
+            if styles:
+                style = obj.styles.all()[0]
+                style_name = style.name
+                style_xml = style.xml.strip()
+                gs.create_style(style_name, style_data=style_xml)
+                gs.set_default_style(workspace, datastore, view, style_name)
+            # if no styles are given, set default style to point
             gs.set_default_style(workspace, datastore, view, 'point')
     publish_to_geoserver.short_description = _("Publish to geoserver")
 
