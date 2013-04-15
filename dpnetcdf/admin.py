@@ -200,6 +200,8 @@ class MapLayerAdmin(admin.ModelAdmin):
             sql_query = 'SELECT * FROM %s' % obj.parameter
             view = obj.parameter
             gs.create_feature_type(workspace, datastore, view, sql_query)
+            # recalculate native and lat/lon bounding boxes
+            gs.recalculate_bounding_boxes(workspace, datastore, view)
             # - create or update style(s) and connect it to this view:
             style = obj.styles.all()[0]
             style_name = style.name
