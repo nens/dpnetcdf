@@ -8,6 +8,7 @@ from django.contrib import admin, messages
 from django.contrib.gis.geos import Point
 from django.utils.translation import ugettext_lazy as _
 
+from geoalchemy import WKTSpatialElement
 from geoserverlib.client import GeoserverClient
 
 from dpnetcdf.models import (OpendapCatalog, OpendapSubcatalog, OpendapDataset,
@@ -142,18 +143,26 @@ class MapLayerAdmin(admin.ModelAdmin):
                 values = ds[variable_name][:]
                 # create insertable rows
                 for i in range(len(x_values)):
-                    point = Point(x_values[i], y_values[i])
-                    # point.set_srid(28992)  # RD srid (lizard_map/coordinates)
+                    x = x_values[i]
+                    y = y_values[i]
+                    # RD srid (lizard_map/coordinates)
+                    point = Point(x, y, srid=28992)
                     value = values[i]
                     if value == fill_value:
                         value = None
-                    row_key = (point.wkt, year, scenario)
+                        if int(x) == 0  and int(y) == 0:
+                            # skip x = 0.0, y = 0.0 and no value,
+                            continue
+                    row_key = (point, year, scenario)
                     raw_rows[row_key][variable_name] = value
             inserts = []
             for row_key, variables in raw_rows.items():
-                wkt_point, year, scenario = row_key
+                point, year, scenario = row_key
                 t = Table()
-                t.geom = wkt_point
+                # need to cast this point to a WKTSpatialElement with the
+                # RD (28992) srid for GeoAlchemy
+                t.geom = WKTSpatialElement(point.wkt, 28992,
+                                           geometry_type='POINT')
                 t.zichtjaar = year
                 t.scenario = scenario
                 # add variables
@@ -169,7 +178,6 @@ class MapLayerAdmin(admin.ModelAdmin):
             # now commit the data
             session.add_all(inserts)
             session.commit()
-
             # now upload settings to geoserver:
             # - check for workspace 'deltaportaal', if it does not exist,
             #   create it:
@@ -177,6 +185,7 @@ class MapLayerAdmin(admin.ModelAdmin):
             # - check for datastore 'deltaportaal', if it does not exist,
             #   create it with the correct connection parameters (from django.conf.settings?):
             datastore = 'dpnetcdf'
+            # TODO; set connection_parameters in django settings
             connection_parameters = {
                 'host': '192.168.20.11',
                 'port': '5432',
@@ -196,7 +205,8 @@ class MapLayerAdmin(admin.ModelAdmin):
             style_name = style.name
             style_xml = style.xml.strip()
             gs.create_style(style_name, style_data=style_xml)
-            gs.set_default_style(workspace, datastore, view, style_name)
+            # set default style to point for now, while developing
+            gs.set_default_style(workspace, datastore, view, 'point')
     publish_to_geoserver.short_description = _("Publish to geoserver")
 
     class Media:

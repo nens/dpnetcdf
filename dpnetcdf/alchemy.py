@@ -40,8 +40,9 @@ class ColumnMaker(object):
                       nullable=kwargs.get('nullable', False))
 
     def _point_column(self, name, *args, **kwargs):
+        srid = kwargs.pop('srid', 28992)
         return GeometryExtensionColumn(
-            name, Geometry(2))
+            name, Geometry(2, srid=srid))
 
     def create(self, col_data):
         col_type = col_data.pop('type')
@@ -62,7 +63,7 @@ def create_geo_table(table_name, *extra_columns):
     cm = ColumnMaker()
     columns = [
         cm.create({'type': 'pk', 'name': 'id'}),
-        cm.create({'type': 'point', 'name': 'geom'}),
+        cm.create({'type': 'point', 'name': 'geom', 'srid': 28992}),
         cm.create({'type': 'string', 'name': 'zichtjaar', 'max_length': 6}),
         cm.create({'type': 'string', 'name': 'scenario', 'max_length': 2,
                    'nullable': True}),
