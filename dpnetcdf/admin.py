@@ -84,8 +84,7 @@ class MapLayerAdmin(admin.ModelAdmin):
     nr_of_styles.short_description = _("styles")
 
     def publish_to_geoserver(self, request, queryset):
-        # TODO: put geoserver connection data in settings or DB
-        gs = GeoserverClient('localhost', 8123, 'admin', 'geoserver')
+        gs = GeoserverClient(**settings.GEOSERVER_CONFIG)
         workspace = 'deltaportaal'  # TODO: put in settings
         for obj in queryset:
             # upload to geoserver, steps:
