@@ -2,9 +2,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 from __future__ import print_function
-from django.conf import settings
 
-from django.contrib.gis.db.models import GeometryField
+from django.contrib.gis.gdal import DataSource as GDALDataSource
 from django.db import models
 from django.utils.translation import ugettext_lazy as _
 
@@ -101,10 +100,11 @@ class OpendapDataset(models.Model):
     def update_variables(self):
         dataset = get_dataset(self.dataset_url)
         # TODO: make variable 'mapper' more future proof by using exlusion
-        # variables:
-        # see http://opendap-dm1.knmi.nl:8080/thredds/dodsC/deltamodel/Deltaportaal/DPRD/199101060440_DPRD_S0v1_2100_SW_RF1p0p3.nc.html
+        # variables, see:
+        # http://opendap-dm1.knmi.nl:8080/thredds/dodsC/deltamodel/\
+        # Deltaportaal/DPRD/199101060440_DPRD_S0v1_2100_SW_RF1p0p3.nc.html
         excluded_variables = ['time', 'analysis_time', 'lat', 'lon', 'x', 'y',
-                               'station_id', 'station_names']
+                              'station_id', 'station_names']
         var_names = [v for v in dataset.keys() if v not in excluded_variables]
         for var_name in var_names:
             var, _created = Variable.objects.get_or_create(name=var_name)
@@ -132,33 +132,30 @@ class Style(models.Model):
         return self.name
 
 
-class Geometry(models.Model):
-    """Base geometry field primarily for holding points, lines, etc."""
-    geometry = GeometryField()
-
-    class Meta:
-        verbose_name = _("geometry")
-        verbose_name_plural = _("geometries")
-
-    def __unicode__(self):
-        return unicode(self.geometry)
-
-
-def get_shape_file_upload_dir(instance, filename):
-    upload_dir = "%s/%s" % (settings.MEDIA_ROOT, filename)
-    return upload_dir
-
-
 class ShapeFile(models.Model):
     name = models.CharField(max_length=255)
-    shape_file = models.FileField(upload_to=get_shape_file_upload_dir)
+    path = models.CharField(max_length=255, blank=True)
+    # identifier_column is the column that maps to  the netcdf's identifier
+    # column name
+    identifier = models.CharField(max_length=30, blank=True)
+
+    @property
+    def identifier_geom_map(self):
+        ds = GDALDataSource(self.path)
+        layer = ds[0]
+        identifiers = layer.get_fields(self.identifier)
+        geoms = layer.get_geoms()
+        result = {}
+        for i in range(len(identifiers)):
+            result[identifiers[i]] = geoms[i]
+        return result
 
     class Meta:
         verbose_name = _("shapefile")
         verbose_name_plural = _("shapefiles")
 
     def __unicode__(self):
-        return self.name
+        return "%s (%s)" % (self.name, self.path)
 
 
 class Datasource(models.Model):
@@ -194,19 +191,3 @@ class MapLayer(models.Model):
 
     def __unicode__(self):
         return self.parameter
-
-
-class Value(models.Model):
-    datasource = models.ForeignKey('Datasource')
-    geometry = models.ForeignKey('Geometry')
-    # value could be a char or boolean perhaps
-    value = models.FloatField(blank=True, null=True)
-    created = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = _("value")
-        verbose_name_plural = _("values")
-        ordering = ('geometry',)
-
-    def __unicode__(self):
-        return "%s - %s: %s" % (self.datasource, self.geometry, self.value)

@@ -23,7 +23,7 @@ class CreateColumnException(BaseException):
 
 
 class ColumnMaker(object):
-
+    """Utility class for easily creating SQLAlchemy/GeoAlchemy columns."""
     DEFAULT_STRING_LENGTH = 50
 
     def _pk_column(self, name='id', **kwargs):
@@ -35,7 +35,8 @@ class ColumnMaker(object):
     def _integer_column(self, name, *args, **kwargs):
         return Column(name, Integer, nullable=kwargs.get('nullable', False))
 
-    def _string_column(self, name, max_length, *args, **kwargs):
+    def _string_column(self, name, max_length=DEFAULT_STRING_LENGTH, *args,
+                       **kwargs):
         return Column(name, Unicode(max_length),
                       nullable=kwargs.get('nullable', False))
 
@@ -54,6 +55,10 @@ class ColumnMaker(object):
             return col_func(**col_data)
 
 
+def drop_table(table_name):
+    engine.execute("DROP TABLE IF EXISTS %s" % table_name)
+
+
 def create_geo_table(table_name, *extra_columns):
     # geom, year, scenario are always required
     # extra_columns are for extra values
@@ -67,12 +72,13 @@ def create_geo_table(table_name, *extra_columns):
         cm.create({'type': 'string', 'name': 'zichtjaar', 'max_length': 6}),
         cm.create({'type': 'string', 'name': 'scenario', 'max_length': 2,
                    'nullable': True}),
+        # identifier can be used to match between shapes and netcdf files
+        cm.create({'type': 'string', 'name': 'identifier', 'nullable': True})
     ]
     for col_data in extra_columns:
         columns.append(cm.create(col_data))
     columns = tuple(set(columns))
-    geo_table = Table(table_name, metadata, *columns,
-                      extend_existing=True)
+    geo_table = Table(table_name, metadata, *columns)
     GeometryDDL(geo_table)
     metadata.create_all()
     mapper(GeoTable, geo_table, properties={

@@ -3,8 +3,8 @@
 from __future__ import unicode_literals
 from __future__ import print_function
 from collections import defaultdict
-from django.conf import settings
 
+from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.gis.geos import Point
 from django.utils.translation import ugettext_lazy as _
@@ -13,11 +13,11 @@ from geoalchemy import WKTSpatialElement
 from geoserverlib.client import GeoserverClient
 
 from dpnetcdf.models import (OpendapCatalog, OpendapSubcatalog, OpendapDataset,
-                             Variable, MapLayer, Datasource, Geometry, Value,
-                             Style, ShapeFile)
+                             Variable, MapLayer, Datasource, Style, ShapeFile)
 from dpnetcdf.opendap import parse_dataset_properties, get_dataset
 from dpnetcdf.utils import parse_opendap_dataset_name
-from dpnetcdf.alchemy import create_geo_table, session, metadata, engine
+from dpnetcdf.alchemy import (create_geo_table, session, metadata, engine,
+                              drop_table)
 
 
 class OpendapDatasetAdmin(admin.ModelAdmin):
@@ -26,7 +26,7 @@ class OpendapDatasetAdmin(admin.ModelAdmin):
     search_fields = ['name']
     readonly_fields = ('variables',)
 
-    actions = ['load_variables', 'load_current_waterlevel']
+    actions = ['load_variables']
 
     def load_variables(self, request, queryset):
         for obj in queryset:
@@ -38,27 +38,6 @@ class OpendapDatasetAdmin(admin.ModelAdmin):
                 msg = _("Loaded variables for %s" % obj)
                 messages.info(request, msg)
     load_variables.short_description = "Load related variables"
-
-    def load_current_waterlevel(self, request, queryset):
-        """Test method for loading dataset data."""
-        # TODO: make this dynamic: let user choose which variable to use
-        var_name = 'waterstand_actueel'
-        for obj in queryset:
-            # load x,y and value data
-            dataset = get_dataset(obj.dataset_url)
-            # create datasource
-            variable = Variable.objects.get(name=var_name)
-            datasource, _created = Datasource.objects.get_or_create(
-                dataset=obj, variable=variable)
-            x_values = dataset['x'][:]  # [:] loads the data
-            y_values = dataset['y'][:]
-            values = dataset[var_name][:]
-            for i in range(len(x_values)):
-                point = Point(x_values[i], y_values[i])
-                geometry, _created = Geometry.objects.get_or_create(
-                    geometry=point)
-                Value.objects.get_or_create(
-                    datasource=datasource, geometry=geometry, value=values[i])
 
 
 class OpendapSubcatalogAdmin(admin.ModelAdmin):
@@ -86,11 +65,6 @@ class OpendapSubcatalogAdmin(admin.ModelAdmin):
     load_datasets.short_description = _("Load related datasets")
 
 
-class ValueAdmin(admin.ModelAdmin):
-    list_display = ('datasource', 'geometry', 'value')
-    list_filter = ['datasource']
-
-
 class MapLayerAdmin(admin.ModelAdmin):
     list_display = ['parameter', 'nr_of_datasources', 'nr_of_styles']
     filter_horizontal = ('datasources', 'styles')
@@ -100,19 +74,19 @@ class MapLayerAdmin(admin.ModelAdmin):
     def nr_of_datasources(self, obj):
         """Return number of datasources."""
         return obj.datasources.count()
-    nr_of_datasources.allow_tags=False
+    nr_of_datasources.allow_tags = False
     nr_of_datasources.short_description = _("datasources")
 
     def nr_of_styles(self, obj):
         """Return number of styles."""
         return obj.styles.count()
-    nr_of_styles.allow_tags=False
+    nr_of_styles.allow_tags = False
     nr_of_styles.short_description = _("styles")
 
     def publish_to_geoserver(self, request, queryset):
-        # TODO: put geoserver connenction data in settings or DB
+        # TODO: put geoserver connection data in settings or DB
         gs = GeoserverClient('localhost', 8123, 'admin', 'geoserver')
-        workspace = 'deltaportaal'
+        workspace = 'deltaportaal'  # TODO: put in settings
         for obj in queryset:
             # upload to geoserver, steps:
             # - create column definitions based on the datasources variables
@@ -128,6 +102,7 @@ class MapLayerAdmin(admin.ModelAdmin):
                         'nullable': True}
                     variable_columns.append(column_definition)
             # - create intermediate table with SQLAlchemy
+            drop_table(obj.parameter)  # first drop, then create again
             Table = create_geo_table(obj.parameter, *variable_columns)
             # - fill this table with the correct values
             raw_rows = defaultdict(dict)
@@ -137,21 +112,38 @@ class MapLayerAdmin(admin.ModelAdmin):
                 year = datasource.dataset.year
                 scenario = datasource.dataset.scenario
                 variable_name = datasource.variable.name
+                shape_file = datasource.shape_file
                 fill_value = ds[variable_name].attributes.get(
                     '_FillValue')
                 x_values = ds['x'][:]  # [:] loads the data
                 y_values = ds['y'][:]
+                # try to get the identifier value
+                if 'station_id' in ds.keys():
+                    identifier_values = ds['station_id'][:]
+                else:
+                    identifier_values = None
                 values = ds[variable_name][:]
                 # create insertable rows
                 for i in range(len(x_values)):
                     x = x_values[i]
                     y = y_values[i]
-                    # RD srid (lizard_map/coordinates)
-                    point = Point(x, y, srid=28992)
+                    if identifier_values is not None:
+                        identifier = identifier_values[i]
+                        try:
+                            geom = shape_file.identifier_geom_map[
+                                identifier]
+                        except KeyError:
+                            # netcdf identifier not in shapefile, fallback
+                            # to netcdf point
+                            geom = Point(x, y, srid=28992)
+                    else:
+                        identifier = None
+                        # RD srid (lizard_map/coordinates)
+                        geom = Point(x, y, srid=28992)
                     value = values[i]
                     if value == fill_value:
                         value = None
-                        if int(x) == 0  and int(y) == 0:
+                        if int(x) == 0 and int(y) == 0:
                             # skip x = 0.0, y = 0.0 and no value,
                             continue
                     if scenario in ['SW', 'RD']:
@@ -160,22 +152,27 @@ class MapLayerAdmin(admin.ModelAdmin):
                     else:
                         scenarios = [scenario]
                     for sc in scenarios:
-                        row_key = (point, year, sc)
+                        row_key = (geom, year, sc)
                         raw_rows[row_key][variable_name] = value
+                        if identifier:
+                            raw_rows[row_key]['identifier'] = identifier
             inserts = []
             for row_key, variables in raw_rows.items():
-                point, year, scenario = row_key
+                geom, year, scenario = row_key
                 t = Table()
                 # need to cast this point to a WKTSpatialElement with the
                 # RD (28992) srid for GeoAlchemy
-                t.geom = WKTSpatialElement(point.wkt, 28992,
-                                           geometry_type='POINT')
+                geom_type = ('%s' % geom.geom_type).upper()
+                t.geom = WKTSpatialElement(geom.wkt, 28992,
+                                           geometry_type=geom_type)
                 t.zichtjaar = year
                 t.scenario = scenario
                 # add variables
                 for var, value in variables.items():
-                    if value is not None:
-                        value = float(value)  # to cast a numpy.float32 to float
+                    # identifier is an integer, so do not cast it to float
+                    if value is not None and var != 'identifier':
+                        # to cast a numpy.float32 to float
+                        value = float(value)
                     setattr(t, var, value)
                 inserts.append(t)
             # delete existing data from table
@@ -189,15 +186,14 @@ class MapLayerAdmin(admin.ModelAdmin):
             # - check for workspace 'deltaportaal', if it does not exist,
             #   create it:
             gs.create_workspace(workspace)
-            # - check for datastore 'deltaportaal', if it does not exist,
-            #   create it with the correct connection parameters (from django.conf.settings?):
+            # - check for datastore, if it does not exist, create it with the
+            #   correct connection parameters
             datastore = 'dpnetcdf'
-            # TODO; set connection_parameters in django settings
             connection_parameters = settings.GEOSERVER_DELTAPORTAAL_DATASTORE
             gs.create_datastore(workspace, datastore, connection_parameters)
             # - create feature type (or layer), based on this map layer with
             #   the correct sql query:
-            sql_query = 'SELECT * FROM %s' % obj.parameter
+            sql_query = 'SELECT * FROM %s' % obj.parameter  # sweet and simple
             view = obj.parameter
             gs.create_feature_type(workspace, datastore, view, sql_query)
             # recalculate native and lat/lon bounding boxes
@@ -210,8 +206,9 @@ class MapLayerAdmin(admin.ModelAdmin):
                 style_xml = style.xml.strip()
                 gs.create_style(style_name, style_data=style_xml)
                 gs.set_default_style(workspace, datastore, view, style_name)
-            # if no styles are given, set default style to point
-            gs.set_default_style(workspace, datastore, view, 'point')
+            else:
+                # if no styles are given, set default style to point
+                gs.set_default_style(workspace, datastore, view, 'point')
     publish_to_geoserver.short_description = _("Publish to geoserver")
 
     class Media:
@@ -224,8 +221,6 @@ admin.site.register(OpendapCatalog)
 admin.site.register(OpendapSubcatalog, OpendapSubcatalogAdmin)
 admin.site.register(OpendapDataset, OpendapDatasetAdmin)
 admin.site.register(Variable)
-admin.site.register(Value, ValueAdmin)
-admin.site.register(Geometry)
 admin.site.register(MapLayer, MapLayerAdmin)
 admin.site.register(Style)
 admin.site.register(Datasource)
