@@ -165,9 +165,9 @@ class Datasource(models.Model):
     dataset = models.ForeignKey('OpendapDataset', null=True)
     # the specific variable from the dataset
     variable = models.ForeignKey('Variable', null=True)
+    shape_file = models.ForeignKey('ShapeFile', null=True)
+
     imported = models.DateTimeField(blank=True, null=True)
-    # TODO: delete it?
-    geometries = models.ManyToManyField('Geometry', blank=True)
 
     class Meta:
         verbose_name = _("datasource")

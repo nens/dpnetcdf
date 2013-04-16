@@ -154,8 +154,14 @@ class MapLayerAdmin(admin.ModelAdmin):
                         if int(x) == 0  and int(y) == 0:
                             # skip x = 0.0, y = 0.0 and no value,
                             continue
-                    row_key = (point, year, scenario)
-                    raw_rows[row_key][variable_name] = value
+                    if scenario in ['SW', 'RD']:
+                        # split in 'S', 'W', 'R' and 'D'
+                        scenarios = [scenario[0], scenario[1]]
+                    else:
+                        scenarios = [scenario]
+                    for sc in scenarios:
+                        row_key = (point, year, sc)
+                        raw_rows[row_key][variable_name] = value
             inserts = []
             for row_key, variables in raw_rows.items():
                 point, year, scenario = row_key
@@ -187,7 +193,7 @@ class MapLayerAdmin(admin.ModelAdmin):
             #   create it with the correct connection parameters (from django.conf.settings?):
             datastore = 'dpnetcdf'
             # TODO; set connection_parameters in django settings
-            connection_parameters = settings.GEO_DATABASE_CONFIG
+            connection_parameters = settings.GEOSERVER_DELTAPORTAAL_DATASTORE
             gs.create_datastore(workspace, datastore, connection_parameters)
             # - create feature type (or layer), based on this map layer with
             #   the correct sql query:
