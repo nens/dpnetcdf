@@ -165,6 +165,8 @@ class Datasource(models.Model):
     dataset = models.ForeignKey('OpendapDataset', null=True)
     # the specific variable from the dataset
     variable = models.ForeignKey('Variable', null=True)
+    # datasource specific shape file, can be used for dbf values (
+    # to be determined how, is work in progress)
     shape_file = models.ForeignKey('ShapeFile', null=True)
 
     class Meta:
@@ -181,6 +183,8 @@ class MapLayer(models.Model):
     parameter = models.CharField(max_length=100, blank=True)
     datasources = models.ManyToManyField(Datasource, blank=True)
     styles = models.ManyToManyField(Style, blank=True)
+
+    shape_file = models.ForeignKey('ShapeFile', null=True)
 
     def delete(self):
         """Deleting the maplayer also deletes the related layer and feature
