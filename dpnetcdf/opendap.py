@@ -98,13 +98,14 @@ def parse_catalog_urls(main_catalog_url):
         catalog_ref_tags = dataset_tag.findAll('catalogref')  # must be lower-case
         for catalog_ref_tag in catalog_ref_tags:
             catalog_ref_href = catalog_ref_tag['xlink:href']
+            title = catalog_ref_tag['xlink:title']
             url_components = [dataset_id, catalog_ref_href]
             url = '/'.join([c.strip('/') for c in url_components])
-            yield url
+            yield {'url': url, 'name': title}  # use name for title
 
 
 def get_catalog_urls():
-    return [cat for cat in parse_catalog_urls(MAIN_CATALOG)]
+    return [cat['url'] for cat in parse_catalog_urls(MAIN_CATALOG)]
 
 
 def get_dataset_urls(catalog_url):
@@ -128,11 +129,15 @@ def urlify(*url_components):
     return url
 
 
+def root_catalog_url():
+    return urlify(URL_ROOT, CATALOG_SERVICE, CATALOG_BASE,
+                  'catalog.xml')
+
+
 def fetch_all():
     """Test method for fast testing the functions above."""
-    main_catalog_url = urlify(URL_ROOT, CATALOG_SERVICE, CATALOG_BASE,
-                              'catalog.xml')
-    relative_catalog_urls = [cat for cat in parse_catalog_urls(
+    main_catalog_url = root_catalog_url()
+    relative_catalog_urls = [cat['url'] for cat in parse_catalog_urls(
         main_catalog_url)]
     catalog_urls = [urlify(URL_ROOT, CATALOG_SERVICE, cat) for cat in
                     relative_catalog_urls]
