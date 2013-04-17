@@ -7,7 +7,10 @@ from django.contrib.gis.gdal import DataSource as GDALDataSource
 from django.db import models
 from django.utils.translation import ugettext_lazy as _
 
+from dpnetcdf.conf import settings
 from dpnetcdf.opendap import urlify, get_dataset
+from geoserverlib.client import GeoserverClient
+from dpnetcdf.alchemy import drop_table
 
 
 class OpendapCatalog(models.Model):
@@ -155,7 +158,7 @@ class ShapeFile(models.Model):
         verbose_name_plural = _("shapefiles")
 
     def __unicode__(self):
-        return "%s (%s)" % (self.name, self.path)
+        return self.name
 
 
 class Datasource(models.Model):
@@ -163,8 +166,6 @@ class Datasource(models.Model):
     # the specific variable from the dataset
     variable = models.ForeignKey('Variable', null=True)
     shape_file = models.ForeignKey('ShapeFile', null=True)
-
-    imported = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         verbose_name = _("datasource")
@@ -178,12 +179,23 @@ class MapLayer(models.Model):
     # Parameter can be something like waterstand_actueel or chloride. It is
     # the identifier for this map layer and the geoserver layer name.
     parameter = models.CharField(max_length=100, blank=True)
-    # TODO: check whether datasources datasets should be of the same origin
     datasources = models.ManyToManyField(Datasource, blank=True)
     styles = models.ManyToManyField(Style, blank=True)
-    # sql query for geoserver
-    sql_query = models.TextField(blank=True)
-    # TODO: consider adding a maplayer status field, e.g. created_geo_table
+
+    def delete(self):
+        """Deleting the maplayer also deletes the related layer and feature
+        type on the GeoServer.
+
+        """
+        workspace = settings.NETCDF_WORKSPACE_NAME
+        datastore = settings.NETCDF_DATASTORE_NAME
+        view = self.parameter
+        gs = GeoserverClient(**settings.GEOSERVER_CONFIG)
+        gs.delete_layer(view)
+        gs.delete_feature_type(workspace, datastore, view)
+        # now drop the table as well
+        drop_table(self.parameter)
+        super(MapLayer, self).delete()
 
     class Meta:
         verbose_name = _("maplayer")

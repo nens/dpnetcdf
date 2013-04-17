@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 from __future__ import print_function
+import logging
 
 from geoalchemy import (Geometry, GeometryExtensionColumn, GeometryColumn,
                         GeometryDDL)
@@ -16,6 +17,9 @@ engine = create_engine(settings.NETCDF_SQLALCHEMY_CONNECTION, echo=True)
 Session = sessionmaker(bind=engine)
 session = Session()
 metadata = MetaData(bind=engine)
+
+
+logger = logging.getLogger(__name__)
 
 
 class CreateColumnException(BaseException):
@@ -56,7 +60,24 @@ class ColumnMaker(object):
 
 
 def drop_table(table_name):
-    engine.execute("DROP TABLE IF EXISTS %s" % table_name)
+    """
+    Need to call reflect() on metadata first to get the available tables in
+    the metadata instance.
+
+    """
+    metadata.reflect()
+    try:
+        table = metadata.tables[table_name]
+    except KeyError:
+        logger.error("Could not drop table '%s'. Does not exist in SQLAlchemy "
+                     "metadata." % table_name)
+    else:
+        try:
+            table.drop(engine, checkfirst=False)
+        except Exception, msg:
+            logger.error("Error dropping table '%s'. Is it already dropped "
+                         "manually?" % table_name)
+        metadata.remove(table)
 
 
 def create_geo_table(table_name, *extra_columns):
@@ -70,7 +91,7 @@ def create_geo_table(table_name, *extra_columns):
         cm.create({'type': 'pk', 'name': 'id'}),
         cm.create({'type': 'point', 'name': 'geom', 'srid': 28992}),
         cm.create({'type': 'string', 'name': 'zichtjaar', 'max_length': 6}),
-        cm.create({'type': 'string', 'name': 'scenario', 'max_length': 2,
+        cm.create({'type': 'string', 'name': 'scenario', 'max_length': 10,
                    'nullable': True}),
         # identifier can be used to match between shapes and netcdf files
         cm.create({'type': 'string', 'name': 'identifier', 'nullable': True})
