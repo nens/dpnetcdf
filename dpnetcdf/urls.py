@@ -9,8 +9,6 @@ from django.conf.urls.defaults import url
 from django.contrib import admin
 from lizard_ui.urls import debugmode_urlpatterns
 
-from dpnetcdf import views
-
 admin.autodiscover()
 
 urlpatterns = patterns(

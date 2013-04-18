@@ -11,6 +11,7 @@ from dpnetcdf.conf import settings
 from dpnetcdf.opendap import urlify, get_dataset
 from geoserverlib.client import GeoserverClient
 from dpnetcdf.alchemy import drop_table
+from dpnetcdf.utils import parse_dataset_name
 
 
 class OpendapCatalog(models.Model):
@@ -73,18 +74,6 @@ class OpendapDataset(models.Model):
     name = models.CharField(max_length=255)
     date = models.DateTimeField()
 
-    # Deltaportaal specific fields derived from file name
-    # time_zero example: 199101060440
-    time_zero = models.CharField(max_length=20, blank=True)
-    # program examples: DPRD, DPR, DPR_maas, DPR_rijn
-    program = models.CharField(max_length=30, blank=True)
-    strategy = models.CharField(max_length=10, blank=True)  # e.g. S0v1
-    # year is a CharField because it can have postfixes like 2100W
-    year = models.CharField(max_length=10, blank=True)  # e.g. 2050, 2050G
-    scenario = models.CharField(max_length=10, blank=True)  # e.g. RD
-    # calculation_facility example: RF1p0p3
-    calculation_facility = models.CharField(max_length=10, blank=True)
-
     variables = models.ManyToManyField('Variable')
     # TODO: add `modified` DateTimeField
 
@@ -100,10 +89,24 @@ class OpendapDataset(models.Model):
     def dataset_url(self):
         return urlify(self.base_url, self.opendap_url, self.url)
 
-    def update_variables(self):
+    def get_params_from_name(self):
+        """Parse name params, e.g. time_zero, program, strategy, year,
+        scenario, calculation_facility.
+
+        - time_zero example: 199101060440
+        - program examples: DPRD, DPR, DPR_maas, DPR_rijn
+        - strategy example: S0v1
+        - year is a CharField because it can have postfixes like 2100W, example
+        2050, 2050G
+        - scenario example: RD
+        - calculation_facility example: RF1p0p3
+
+        """
+        return parse_dataset_name(self.name)
+
+    def load_variables(self):
         dataset = get_dataset(self.dataset_url)
-        # TODO: make variable 'mapper' more future proof by using exlusion
-        # variables, see:
+        # For variable names, see:
         # http://opendap-dm1.knmi.nl:8080/thredds/dodsC/deltamodel/\
         # Deltaportaal/DPRD/199101060440_DPRD_S0v1_2100_SW_RF1p0p3.nc.html
         excluded_variables = ['time', 'analysis_time', 'lat', 'lon', 'x', 'y',
@@ -113,11 +116,15 @@ class OpendapDataset(models.Model):
             var, _created = Variable.objects.get_or_create(name=var_name)
             if _created:
                 self.variables.add(var)
+            else:
+                if var not in self.variables.all():
+                    self.variables.add(var)
         return var_names
 
     class Meta:
         verbose_name = _("dataset")
         verbose_name_plural = _("datasets")
+        ordering = ('name',)
 
     def __unicode__(self):
         return self.name
@@ -167,11 +174,12 @@ class Datasource(models.Model):
     variable = models.ForeignKey('Variable', null=True)
     # datasource specific shape file, can be used for dbf values (
     # to be determined how, is work in progress)
-    shape_file = models.ForeignKey('ShapeFile', null=True)
+    shape_file = models.ForeignKey('ShapeFile', blank=True, null=True)
 
     class Meta:
         verbose_name = _("datasource")
         verbose_name_plural = _("datasources")
+        ordering = ('dataset__name',)
 
     def __unicode__(self):
         return "%s (%s)" % (self.dataset, self.variable)
@@ -184,7 +192,7 @@ class MapLayer(models.Model):
     datasources = models.ManyToManyField(Datasource, blank=True)
     styles = models.ManyToManyField(Style, blank=True)
 
-    shape_file = models.ForeignKey('ShapeFile', null=True)
+    shape_file = models.ForeignKey('ShapeFile', blank=True, null=True)
 
     def delete(self):
         """Deleting the maplayer also deletes the related layer and feature

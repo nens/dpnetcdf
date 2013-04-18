@@ -19,9 +19,6 @@ DATASET_NAME_PATTERN = re.compile(
          """, re.X)
 
 
-def parse_opendap_dataset_name(name):
+def parse_dataset_name(name):
     """Test the regex extensively. See tests file for specific tests."""
-    res = DATASET_NAME_PATTERN.match(name).groupdict()
-    return [res.get('time_zero'), res.get('program'), res.get('strategy'),
-            res.get('year'), res.get('scenario'),
-            res.get('calculation_facility')]
+    return DATASET_NAME_PATTERN.match(name).groupdict()

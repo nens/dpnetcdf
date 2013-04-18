@@ -5,7 +5,7 @@ from __future__ import print_function
 
 from django.test import TestCase
 
-from dpnetcdf.utils import parse_opendap_dataset_name
+from dpnetcdf.utils import parse_dataset_name
 
 
 TEST_DATA = {
@@ -61,9 +61,17 @@ TEST_DATA = {
         '197612310100', 'DPZW_NHI30_WatervraagAanbodTekortKnelpuntenRegiosZomerperiode', 'S0v1', '2050', 'D', 'RF1p0p4']
 }
 
+
+def dataset_name_params_to_list(params):
+    return [params.get('time_zero'), params.get('program'),
+            params.get('strategy'), params.get('year'),
+            params.get('scenario'), params.get('calculation_facility')]
+
+
 class OpendapTests(TestCase):
 
     def test_name_parsing(self):
         for name, expected in TEST_DATA.items():
-            result = parse_opendap_dataset_name(name)
+            params = parse_dataset_name(name)
+            result = dataset_name_params_to_list(params)
             self.assertEquals(expected, result)

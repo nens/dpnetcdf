@@ -5,7 +5,7 @@ from __future__ import print_function
 from collections import defaultdict
 import logging
 
-from django.contrib import admin, messages
+from django.contrib import admin
 from django.contrib.gis.gdal import OGRException
 from django.contrib.gis.geos import Point
 from django.utils.translation import ugettext as _
@@ -16,8 +16,8 @@ from geoserverlib.client import GeoserverClient
 from dpnetcdf.conf import settings
 from dpnetcdf.models import (OpendapCatalog, OpendapSubcatalog, OpendapDataset,
                              Variable, MapLayer, Datasource, Style, ShapeFile)
-from dpnetcdf.opendap import parse_dataset_properties, get_dataset
-from dpnetcdf.utils import parse_opendap_dataset_name
+from dpnetcdf.opendap import get_dataset
+from dpnetcdf.utils import parse_dataset_name
 from dpnetcdf.alchemy import (create_geo_table, session, metadata, engine,
                               drop_table)
 
@@ -32,48 +32,10 @@ logger = logging.getLogger(__name__)
 
 
 class OpendapDatasetAdmin(admin.ModelAdmin):
-    list_display = ('catalog', 'name', 'date')
+    list_display = ('name', 'catalog', 'date')
     list_filter = ['catalog']
     search_fields = ['name']
     readonly_fields = ('variables',)
-
-    actions = ['load_variables']
-
-    def load_variables(self, request, queryset):
-        for obj in queryset:
-            try:
-                obj.update_variables()
-            except Exception, msg:
-                messages.error(request, msg)
-            else:
-                msg = _("Loaded variables for %s" % obj)
-                messages.info(request, msg)
-    load_variables.short_description = "Load related variables"
-
-
-class OpendapSubcatalogAdmin(admin.ModelAdmin):
-    list_display = ('identifier', 'catalog')
-
-    actions = ['load_datasets']
-
-    def load_datasets(self, request, queryset):
-        for obj in queryset:
-            datasets_properties = parse_dataset_properties(obj.url)
-            count = 0
-            for props in datasets_properties:
-                nf = parse_opendap_dataset_name(props['name'])
-                defaults = {
-                    'time_zero': nf[0], 'program': nf[1], 'strategy': nf[2],
-                    'year': nf[3], 'scenario': nf[4],
-                    'calculation_facility': nf[5], 'date': props['timestamp']}
-                dataset, _created = OpendapDataset.objects.get_or_create(
-                    catalog=obj, url=props['urlpath'], name=props['name'],
-                    defaults=defaults)
-                if _created:
-                    count += 1
-            msg = _("Created %s datasets for %s" % (count, obj.url))
-            messages.info(request, msg)
-    load_datasets.short_description = _("Load related datasets")
 
 
 class MapLayerAdmin(admin.ModelAdmin):
@@ -133,10 +95,11 @@ class MapLayerAdmin(admin.ModelAdmin):
             for datasource in datasources:
                 # make fill_value NULL in database
                 ds = get_dataset(datasource.dataset.dataset_url)
-                year = datasource.dataset.year
-                scenario = datasource.dataset.scenario
+                name_params = parse_dataset_name(datasource.dataset.name)
+                year = name_params['year']
+                scenario = name_params.get('scenario', '')
                 variable_name = datasource.variable.name
-                shape_file = datasource.shape_file
+                shape_file = datasource.shape_file or obj.shape_file
                 fill_value = ds[variable_name].attributes.get(
                     '_FillValue')
                 x_values = ds['x'][:]  # [:] loads the data
@@ -184,7 +147,19 @@ class MapLayerAdmin(admin.ModelAdmin):
                         if int(x) == 0 and int(y) == 0:
                             # skip x = 0.0, y = 0.0 and no value,
                             continue
-                    if scenario in ['SW', 'RD']:
+                    if not scenario:
+                        # probably reference dataset
+                        ref_year = settings.NETCDF_REFERENCE_YEAR
+                        if not str(year) == str(ref_year):
+                            # This shouldn't happen. No scenario means year
+                            # should be the same as the reference year.
+                            # Therefore, this warning. Maybe, the reference
+                            # year has changed for certain files.
+                            logger.warning(
+                                _("No scenario and year %s does not equal "
+                                  "reference year %s.") % (year, ref_year))
+                        scenarios = SCENARIO_MAP.keys()
+                    elif scenario in ['SW', 'RD']:
                         # split in 'S', 'W', 'R' and 'D'
                         scenarios = [scenario[0], scenario[1]]
                     else:
@@ -274,7 +249,7 @@ class ShapeFileAdmin(admin.ModelAdmin):
 
 
 admin.site.register(OpendapCatalog)
-admin.site.register(OpendapSubcatalog, OpendapSubcatalogAdmin)
+admin.site.register(OpendapSubcatalog)
 admin.site.register(OpendapDataset, OpendapDatasetAdmin)
 admin.site.register(Variable)
 admin.site.register(MapLayer, MapLayerAdmin)
