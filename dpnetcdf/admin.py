@@ -127,7 +127,7 @@ class MapLayerAdmin(admin.ModelAdmin):
                                 msg = _("Field '%s' not found in shapefile %s."
                                         "Falling back to NetCDF point." % (
                                         shape_file.identifier, shape_file))
-                            logger.debug(msg)
+                            logger.error(msg)
                             geom = Point(x, y, srid=28992)
                         except KeyError:
                             # netcdf identifier not in shapefile, fallback
