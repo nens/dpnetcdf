@@ -149,8 +149,7 @@ class ShapeFile(models.Model):
     # column name
     identifier = models.CharField(max_length=30, blank=True)
 
-    @property
-    def identifier_geom_map(self):
+    def get_identifier_geom_map(self):
         ds = GDALDataSource(self.path)
         layer = ds[0]
         identifiers = layer.get_fields(self.identifier)

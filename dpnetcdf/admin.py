@@ -102,6 +102,7 @@ class MapLayerAdmin(admin.ModelAdmin):
                 scenario = name_params.get('scenario', '')
                 variable_name = datasource.variable.name
                 shape_file = obj.shape_file  # pick the map layer's shape file
+                identifier_geom_map = shape_file.get_identifier_geom_map()
                 fill_value = ds[variable_name].attributes.get(
                     '_FillValue')
                 x_values = ds['x'][:]  # [:] loads the data
@@ -121,8 +122,7 @@ class MapLayerAdmin(admin.ModelAdmin):
                         if identifier in unavailable_identifiers:
                             continue
                         try:
-                            geom = shape_file.identifier_geom_map[
-                                identifier]
+                            geom = identifier_geom_map[identifier]
                             raw_rows[identifier]['geom'] = geom
                         except OGRException:
                             if not shape_file.identifier:
@@ -169,12 +169,11 @@ class MapLayerAdmin(admin.ModelAdmin):
                                     # map scenario character to more verbose scenario
                                     # word
                                     sc = SCENARIO_MAP[sc]
-                                if identifier:
-                                    var_key = '%s_%s_abs' % (year, sc)
-                                    variables[variable_name][var_key] = value
-                                    # create relative values
-                                    raw_rows[identifier]['variables'] = \
-                                        variables
+                                var_key = '%s_%s_abs' % (year, sc)
+                                variables[variable_name][var_key] = value
+                                # create relative values
+                                raw_rows[identifier]['variables'] = \
+                                    variables
 
             if not raw_rows:
                 msg = _("No data is generated. Contact your administrator.")
@@ -190,8 +189,14 @@ class MapLayerAdmin(admin.ModelAdmin):
             ref_year = str(settings.NETCDF_REFERENCE_YEAR)
             for identifier, data in raw_rows.items():
                 geom = data['geom']
+                try:
+                    variables = data['variables']
+                except KeyError:
+                    logger.debug("No variable data found for identifier '%s'"
+                        % identifier)
+                    continue
                 for variable_name, year_scenario_data in \
-                        data['variables'].items():
+                        variables.items():
                     year_scenario_keys = []
                     for key, value in year_scenario_data.items():
                         year_scenario_keys.append(key)
