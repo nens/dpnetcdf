@@ -5,7 +5,7 @@ from __future__ import print_function
 from collections import defaultdict
 import logging
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.gis.gdal import OGRException
 from django.contrib.gis.geos import Point
 from django.utils.translation import ugettext as _
@@ -92,6 +92,8 @@ class MapLayerAdmin(admin.ModelAdmin):
                     variable_columns.append(column_definition)
             # - fill this table with the correct values
             raw_rows = defaultdict(dict)
+            # set for identifiers not in the maplayer's shape file
+            unavailable_identifiers = set()
             for datasource in datasources:
                 # make fill_value NULL in database
                 ds = get_dataset(datasource.dataset.dataset_url)
@@ -99,7 +101,7 @@ class MapLayerAdmin(admin.ModelAdmin):
                 year = name_params['year']
                 scenario = name_params.get('scenario', '')
                 variable_name = datasource.variable.name
-                shape_file = datasource.shape_file or obj.shape_file
+                shape_file = obj.shape_file  # pick the map layer's shape file
                 fill_value = ds[variable_name].attributes.get(
                     '_FillValue')
                 x_values = ds['x'][:]  # [:] loads the data
@@ -116,92 +118,119 @@ class MapLayerAdmin(admin.ModelAdmin):
                     y = y_values[i]
                     if identifier_values is not None:
                         identifier = identifier_values[i]
+                        if identifier in unavailable_identifiers:
+                            continue
                         try:
                             geom = shape_file.identifier_geom_map[
                                 identifier]
+                            raw_rows[identifier]['geom'] = geom
                         except OGRException:
                             if not shape_file.identifier:
                                 msg = _("Shapefile instance %s needs an "
                                         "identifier.") % shape_file
                             else:
                                 msg = _("Field '%s' not found in shapefile %s."
-                                        "Falling back to NetCDF point." % (
-                                        shape_file.identifier, shape_file))
+                                        % (shape_file.identifier, shape_file))
                             logger.error(msg)
-                            geom = Point(x, y, srid=28992)
                         except KeyError:
-                            # netcdf identifier not in shapefile, fallback
-                            # to netcdf point
+                            # netcdf identifier not in map layer's shape file
+                            unavailable_identifiers.add(identifier)
                             msg = _("NetCDF identifier '%s' not in shapefile."
-                                    " Falling back to NetCDF point.") % \
-                                identifier
+                                ) % identifier
                             logger.debug(msg)
-                            geom = Point(x, y, srid=28992)
-                    else:
-                        identifier = None
-                        # RD srid (lizard_map/coordinates)
-                        geom = Point(x, y, srid=28992)
-                    value = values[i]
-                    if value == fill_value:
-                        value = None
-                        if int(x) == 0 and int(y) == 0:
-                            # skip x = 0.0, y = 0.0 and no value,
-                            continue
-                    if not scenario:
-                        # probably reference dataset
-                        ref_year = settings.NETCDF_REFERENCE_YEAR
-                        if not str(year) == str(ref_year):
-                            # This shouldn't happen. No scenario means year
-                            # should be the same as the reference year.
-                            # Therefore, this warning. Maybe, the reference
-                            # year has changed for certain files.
-                            logger.warning(
-                                _("No scenario and year %s does not equal "
-                                  "reference year %s.") % (year, ref_year))
-                        scenarios = SCENARIO_MAP.keys()
-                    elif scenario in ['SW', 'RD']:
-                        # split in 'S', 'W', 'R' and 'D'
-                        scenarios = [scenario[0], scenario[1]]
-                    else:
-                        scenarios = [scenario]
-                    for sc in scenarios:
-                        if sc in SCENARIO_MAP.keys():
-                            # map scenario character to more verbose scenario
-                            # word
-                            sc = SCENARIO_MAP[sc]
-                        row_key = (geom, year, sc)
-                        raw_rows[row_key][variable_name] = value
-                        if identifier:
-                            raw_rows[row_key]['identifier'] = identifier
-            inserts = []
+                        else:
+                            variables = raw_rows[identifier].get(
+                                'variables', defaultdict(dict))
+                            value = values[i]
+                            if value == fill_value:
+                                value = None
+                                if int(x) == 0 and int(y) == 0:
+                                    # skip x = 0.0, y = 0.0 and no value,
+                                    continue
+                            if not scenario:
+                                # probably reference dataset
+                                ref_year = settings.NETCDF_REFERENCE_YEAR
+                                if not str(year) == str(ref_year):
+                                    # This shouldn't happen. No scenario means year
+                                    # should be the same as the reference year.
+                                    # Therefore, this warning. Maybe, the reference
+                                    # year has changed for certain files.
+                                    logger.warning(
+                                        _("No scenario and year %s does not equal "
+                                          "reference year %s.") % (year, ref_year))
+                                scenarios = SCENARIO_MAP.keys()
+                            elif scenario in ['SW', 'RD']:
+                                # split in 'S', 'W', 'R' and 'D'
+                                scenarios = [scenario[0], scenario[1]]
+                            else:
+                                scenarios = [scenario]
+                            for sc in scenarios:
+                                if sc in SCENARIO_MAP.keys():
+                                    # map scenario character to more verbose scenario
+                                    # word
+                                    sc = SCENARIO_MAP[sc]
+                                if identifier:
+                                    var_key = '%s_%s_abs' % (year, sc)
+                                    variables[variable_name][var_key] = value
+                                    # create relative values
+                                    raw_rows[identifier]['variables'] = \
+                                        variables
+
+            if not raw_rows:
+                msg = _("No data is generated. Contact your administrator.")
+                logger.error(msg)
+                messages.error(request, msg)
+                return
+
+            insertable_rows = []
             drop_table(obj.parameter)  # first drop table, then create again
             Table = create_geo_table(obj.parameter, *variable_columns)
-            for row_key, variables in raw_rows.items():
-                geom, year, scenario = row_key
-                t = Table()
-                # need to cast this point to a WKTSpatialElement with the
-                # RD (28992) srid for GeoAlchemy
-                geom_type = ('%s' % geom.geom_type).upper()
-                t.geom = WKTSpatialElement(geom.wkt, 28992,
-                                           geometry_type=geom_type)
-                t.zichtjaar = year
-                t.scenario = scenario
-                # add variables
-                for var, value in variables.items():
-                    # identifier is an integer, so do not cast it to float
-                    if value is not None and var != 'identifier':
-                        # to cast a numpy.float32 to float
-                        value = float(value)
-                    setattr(t, var, value)
-                inserts.append(t)
-            # delete existing data from table
-            tbl = metadata.tables[obj.parameter]
-            con = engine.connect()
-            con.execute(tbl.delete())
-            # now commit the data
-            session.add_all(inserts)
+
+            # process raw_rows_new: calculate relative values
+            ref_year = str(settings.NETCDF_REFERENCE_YEAR)
+            for identifier, data in raw_rows.items():
+                geom = data['geom']
+                for variable_name, year_scenario_data in \
+                        data['variables'].items():
+                    year_scenario_keys = []
+                    for key, value in year_scenario_data.items():
+                        year_scenario_keys.append(key)
+                    for year_scenario_key in year_scenario_keys:
+                        year, scenario, postfix = year_scenario_key.split('_')
+                        ref_key = '%s_%s_abs' % (ref_year, scenario)
+                        try:
+                            ref_value = year_scenario_data[ref_key]
+                        except KeyError:
+                            msg = (_("No reference value found for '%s'.") %
+                                   ref_key)
+                            logger.error(msg)
+                            continue
+                        else:
+                            # create the table row definitions
+                            relative_value = (
+                                year_scenario_data[year_scenario_key] -
+                                ref_value
+                            )
+                            t = Table()
+                            # need to cast this point to a WKTSpatialElement with the
+                            # RD (28992) srid for GeoAlchemy
+                            geom_type = ('%s' % geom.geom_type).upper()
+                            t.geom = WKTSpatialElement(geom.wkt, 28992,
+                                                       geometry_type=geom_type)
+                            t.year = year
+                            t.scenario = scenario
+                            # set identifier and variable value
+                            setattr(t, 'identifier', identifier)
+                            # need to cast relative_value (numpy.float32) to
+                            # float
+                            setattr(t, variable_name, float(relative_value))
+                            insertable_rows.append(t)
+
+            # commit the rows
+            session.add_all(insertable_rows)
             session.commit()
-            # now upload settings to geoserver:
+
+            # upload settings to geoserver:
             # - check for workspace 'deltaportaal', if it does not exist,
             #   create it:
             gs.create_workspace(workspace)

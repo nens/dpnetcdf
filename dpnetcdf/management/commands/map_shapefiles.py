@@ -23,8 +23,9 @@ class Command(BaseCommand):
                         name.endswith('.shp')]
             shape_files.update(dict(shp_data))
         for name, path in shape_files.items():
-            sf, _created = ShapeFile.objects.get_or_create(name=name,
-                                                           path=path)
+            identifier = 'LOCID'  # for now, this is the only identifier
+            sf, _created = ShapeFile.objects.get_or_create(
+                name=name, path=path, identifier=identifier)
             if _created:
                 any_created += 1
                 sys.stdout.write("created ShapeFile instance: %s\n" % sf)

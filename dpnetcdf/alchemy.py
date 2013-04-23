@@ -90,7 +90,7 @@ def create_geo_table(table_name, *extra_columns):
     columns = [
         cm.create({'type': 'pk', 'name': 'id'}),
         cm.create({'type': 'point', 'name': 'geom', 'srid': 28992}),
-        cm.create({'type': 'string', 'name': 'zichtjaar', 'max_length': 6}),
+        cm.create({'type': 'string', 'name': 'year', 'max_length': 6}),
         cm.create({'type': 'string', 'name': 'scenario', 'max_length': 10,
                    'nullable': True}),
         # identifier can be used to match between shapes and netcdf files
@@ -116,7 +116,7 @@ def test(nr=1):
     TableClass = create_geo_table(table_name, *extra_columns)
     t = TableClass()
     t.geom = 'POINT(-88.5945861592357 42.9480095987261)'
-    t.zichtjaar = '2015'
+    t.year = '2015'
     t.scenario = 'RD'
     session.add(t)
     session.commit()
