@@ -6,6 +6,7 @@ from __future__ import print_function
 from django.test import TestCase
 
 from dpnetcdf.utils import parse_dataset_name
+from dpnetcdf.alchemy import ColumnMaker
 
 
 TEST_DATA = {
@@ -75,3 +76,54 @@ class OpendapTests(TestCase):
             params = parse_dataset_name(name)
             result = dataset_name_params_to_list(params)
             self.assertEquals(expected, result)
+
+
+class GeoAlchemyColumnMakerTests(TestCase):
+    """Tests for column creation by ColumnMaker utility class."""
+    def setUp(self):
+        self.cm = ColumnMaker()
+
+    def test_primary_key_column(self):
+        col = self.cm.create({'type': 'pk', 'name': 'id'})
+        self.assertTrue(col.primary_key)
+        self.assertEqual(col.name, 'id')
+        self.assertFalse(col.nullable)
+        self.assertEqual(str(col.type), 'INTEGER')
+
+    def test_string_column(self):
+        col = self.cm.create({'type': 'string', 'name': 'identifier',
+                              'nullable': True})
+        self.assertFalse(col.primary_key)
+        self.assertEqual(col.name, 'identifier')
+        self.assertTrue(col.nullable)
+        # max_length default is 50
+        self.assertEqual(str(col.type), 'VARCHAR(50)')
+
+    def test_string_column_2(self):
+        col = self.cm.create({'type': 'string', 'name': 'scenario',
+                              'max_length': 10})
+        self.assertEqual(col.name, 'scenario')
+        self.assertFalse(col.nullable)
+        self.assertEqual(str(col.type), 'VARCHAR(10)')
+
+    def test_geometry_column(self):
+        col = self.cm.create({'type': 'point', 'name': 'geom', 'srid': 28992})
+        self.assertEqual(col.name, 'geom')
+        self.assertTrue(col.nullable)
+        self.assertEqual(str(col.type), 'GEOMETRY')
+        self.assertTrue('srid=28992' in '%r' % col)
+
+    def test_float_column(self):
+        col = self.cm.create({'type': 'float', 'name': 'waterstand_actueel'})
+        self.assertFalse(col.primary_key)
+        self.assertEqual(col.name, 'waterstand_actueel')
+        self.assertFalse(col.nullable)
+        self.assertEqual(str(col.type), 'FLOAT')
+
+    def test_integer_column(self):
+        col = self.cm.create({'type': 'integer', 'name': 'area_code',
+                              'nullable': True})
+        self.assertFalse(col.primary_key)
+        self.assertEqual(col.name, 'area_code')
+        self.assertTrue(col.nullable)
+        self.assertEqual(str(col.type), 'INTEGER')
