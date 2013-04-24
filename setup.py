@@ -33,7 +33,8 @@ tests_require = [
 
 setup(name='dpnetcdf',
       version=version,
-      description="TODO",
+      description=("Synchronisation and configuration of calculation results "
+                   "within deltaportaal site."),
       long_description=long_description,
       # Get strings from http://www.python.org/pypi?%3Aaction=list_classifiers
       classifiers=['Programming Language :: Python',
