@@ -18,8 +18,8 @@ from dpnetcdf.models import (OpendapCatalog, OpendapSubcatalog, OpendapDataset,
                              Variable, MapLayer, Datasource, Style, ShapeFile)
 from dpnetcdf.opendap import get_dataset
 from dpnetcdf.utils import parse_dataset_name
-from dpnetcdf.alchemy import (create_geo_table, session, metadata, engine,
-                              drop_table)
+from dpnetcdf.alchemy import (create_geo_table, session, drop_table,
+                              get_column_type, ColumnTypeException)
 
 SCENARIO_MAP = {
     'R': 'rust',
@@ -102,7 +102,16 @@ class MapLayerAdmin(admin.ModelAdmin):
                 scenario = name_params.get('scenario', '')
                 variable_name = datasource.variable.name
                 shape_file = obj.shape_file  # pick the map layer's shape file
-                identifier_geom_map = shape_file.get_identifier_geom_map()
+                shape_file_extra_fields = obj.get_shape_file_extra_fields()
+                secondary_shape_file = obj.connection_shape_file
+                identifier_data_map = shape_file.get_identifier_data_map()
+                if secondary_shape_file:
+                    secondary_identifier_data_map = (
+                        secondary_shape_file.get_identifier_data_map())
+                    secondary_identifier = secondary_shape_file.identifier
+                else:
+                    secondary_identifier_data_map = None
+                    secondary_identifier = None
                 fill_value = ds[variable_name].attributes.get(
                     '_FillValue')
                 x_values = ds['x'][:]  # [:] loads the data
@@ -122,8 +131,34 @@ class MapLayerAdmin(admin.ModelAdmin):
                         if identifier in unavailable_identifiers:
                             continue
                         try:
-                            geom = identifier_geom_map[identifier]
+                            connection_identifier = None
+                            if secondary_identifier_data_map:
+                                connection_identifier = (
+                                    identifier_data_map[identifier][secondary_identifier])
+                                geom = secondary_identifier_data_map[connection_identifier]['geom']
+                                var_name = secondary_identifier.lower()
+                                raw_rows[identifier]['extra::%s' % var_name] = connection_identifier
+                                # TODO: determine type for connection identifier: e.g. int(val) == val => integer
+                                column_definition = {
+                                    'type': 'integer', 'name': var_name,
+                                    'nullable': True}
+                                variable_columns.append(column_definition)
+                            else:
+                                geom = identifier_data_map[identifier]['geom']
                             raw_rows[identifier]['geom'] = geom
+                            for sf_ef in shape_file_extra_fields:
+                                ef_value = identifier_data_map[identifier][sf_ef]
+                                var_name = sf_ef.lower()
+                                try:
+                                    column_type = get_column_type(ef_value)
+                                except ColumnTypeException, info:
+                                    logger.error(info)
+                                else:
+                                    raw_rows[identifier]['extra::%s' % var_name] = ef_value
+                                    column_definition = {
+                                        'type': column_type, 'name': var_name,
+                                        'nullable': True}
+                                    variable_columns.append(column_definition)
                         except OGRException:
                             if not shape_file.identifier:
                                 msg = _("Shapefile instance %s needs an "
@@ -189,6 +224,7 @@ class MapLayerAdmin(admin.ModelAdmin):
             ref_year = str(settings.NETCDF_REFERENCE_YEAR)
             for identifier, data in raw_rows.items():
                 geom = data['geom']
+                extra_keys = [key for key in data.keys() if key.startswith('extra::')]
                 try:
                     variables = data['variables']
                 except KeyError:
@@ -229,6 +265,10 @@ class MapLayerAdmin(admin.ModelAdmin):
                             # need to cast relative_value (numpy.float32) to
                             # float
                             setattr(t, variable_name, float(relative_value))
+                            for extra_key in extra_keys:
+                                val = data[extra_key]
+                                extra_name = extra_key[7:]  # remove extra::
+                                setattr(t, extra_name, val)
                             insertable_rows.append(t)
 
             # commit the rows
@@ -246,7 +286,7 @@ class MapLayerAdmin(admin.ModelAdmin):
             gs.create_datastore(workspace, datastore, connection_parameters)
             # - create feature type (or layer), based on this map layer with
             #   the correct sql query:
-            sql_query = 'SELECT * FROM %s' % obj.parameter  # sweet and simple
+            sql_query = obj.sql_query or 'SELECT * FROM %s' % obj.parameter
             view = obj.parameter
             # delete the layer (if it exists)
             gs.delete_layer(view)

@@ -26,6 +26,23 @@ class CreateColumnException(BaseException):
     pass
 
 
+class ColumnTypeException(BaseException):
+    pass
+
+
+def get_column_type(value):
+    """Convert value type to column type."""
+    if type(value) == int:
+        return 'integer'
+    elif type(value) == str:
+        return 'string'
+    elif type(value) == float:
+        return 'float'
+    else:
+        msg = "Unknown column type: %s." % type(value)
+        raise ColumnTypeException(msg)
+
+
 class ColumnMaker(object):
     """Utility class for easily creating SQLAlchemy/GeoAlchemy columns."""
     DEFAULT_STRING_LENGTH = 50

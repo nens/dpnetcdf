@@ -142,21 +142,34 @@ class Style(models.Model):
         return self.name
 
 
+# class ShapeFileField(models.Model):
+#     name = models.CharField(max_length=255)
+
+
 class ShapeFile(models.Model):
     name = models.CharField(max_length=255)
     path = models.CharField(max_length=255, blank=True)
     # identifier_column is the column that maps to  the netcdf's identifier
     # column name
     identifier = models.CharField(max_length=30, blank=True)
+    # PM: add fields ManyToMany to ShapeFileField (see above)
 
-    def get_identifier_geom_map(self):
+    def get_identifier_data_map(self):
         ds = GDALDataSource(self.path)
         layer = ds[0]
         identifiers = layer.get_fields(self.identifier)
+        fields = [field for field in layer.fields if not field ==
+                  self.identifier]
+        field_data = {}
+        for field in fields:
+            field_data[field] = layer.get_fields(field)
         geoms = layer.get_geoms()
         result = {}
         for i in range(len(identifiers)):
-            result[identifiers[i]] = geoms[i]
+            result[identifiers[i]] = {'geom': geoms[i]}
+            for field in fields:
+                data = field_data[field]
+                result[identifiers[i]][field] = data[i]
         return result
 
     class Meta:
@@ -192,6 +205,19 @@ class MapLayer(models.Model):
     styles = models.ManyToManyField(Style, blank=True)
 
     shape_file = models.ForeignKey('ShapeFile', blank=True, null=True)
+    # get extra fields from shape file
+    shape_file_extra_fields = models.CharField(max_length=512, blank=True)
+
+    connection_shape_file = models.ForeignKey(
+        'ShapeFile', blank=True, null=True, related_name='map_layers')
+
+    sql_query = models.TextField(blank=True)  # custom query
+
+    def get_shape_file_extra_fields(self):
+        if self.shape_file_extra_fields:
+            return self.shape_file_extra_fields.split(';')
+        else:
+            return []
 
     def delete(self):
         """Deleting the maplayer also deletes the related layer and feature
