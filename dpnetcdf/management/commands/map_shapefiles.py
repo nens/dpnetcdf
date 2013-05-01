@@ -25,7 +25,7 @@ class Command(BaseCommand):
         for name, path in shape_files.items():
             identifier = 'LOCID'  # for now, this is the only identifier
             sf, _created = ShapeFile.objects.get_or_create(
-                name=name, path=path, identifier=identifier)
+                name=name, path=path, defaults={'identifier': identifier})
             if _created:
                 any_created += 1
                 sys.stdout.write("created ShapeFile instance: %s\n" % sf)
