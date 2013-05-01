@@ -287,6 +287,7 @@ class MapLayerAdmin(admin.ModelAdmin):
             # - create feature type (or layer), based on this map layer with
             #   the correct sql query:
             sql_query = obj.sql_query or 'SELECT * FROM %s' % obj.parameter
+            sql_query = "<![CDATA[%s]]>" % sql_query  # to post with xml
             view = obj.parameter
             # delete the layer (if it exists)
             gs.delete_layer(view)
