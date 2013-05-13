@@ -20,6 +20,7 @@ from dpnetcdf.opendap import get_dataset
 from dpnetcdf.utils import parse_dataset_name
 from dpnetcdf.alchemy import (create_geo_table, session, drop_table,
                               get_column_type, ColumnTypeException)
+from dpnetcdf.forms import MapLayerAdminForm
 
 SCENARIO_MAP = {
     'R': 'rust',
@@ -43,6 +44,8 @@ class MapLayerAdmin(admin.ModelAdmin):
     filter_horizontal = ('datasources', 'styles')
 
     actions = ['full_delete', 'publish_to_geoserver']
+
+    form = MapLayerAdminForm
 
     def nr_of_datasources(self, obj):
         """Return number of datasources."""

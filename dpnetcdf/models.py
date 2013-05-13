@@ -200,7 +200,9 @@ class Datasource(models.Model):
 class MapLayer(models.Model):
     # Parameter can be something like waterstand_actueel or chloride. It is
     # the identifier for this map layer and the geoserver layer name.
-    parameter = models.CharField(max_length=100, blank=True)
+    parameter = models.CharField(
+        max_length=100, blank=True,
+        help_text=_("Only use lower case letters and underscores."))
     datasources = models.ManyToManyField(Datasource, blank=True)
     styles = models.ManyToManyField(Style, blank=True)
 

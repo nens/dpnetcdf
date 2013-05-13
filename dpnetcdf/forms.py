@@ -9,38 +9,16 @@ class MapLayerAdminForm(forms.ModelForm):
     class Meta:
         model = MapLayer
 
-    datasources = forms.ModelMultipleChoiceField(
-        queryset=Datasource.objects.all(),
-        required=False,
-        widget=FilteredSelectMultiple(
-            verbose_name=_('datasources'),
-            is_stacked=False
-        )
-    )
+    def clean_parameter(self):
+        """
+        Enforce lower case parameters only. Using upper case characters
+        does not work: issues with table and query creation and calling by
+        GeoServer.
 
-    styles = forms.ModelMultipleChoiceField(
-        queryset=Style.objects.all(),
-        required=False,
-        widget=FilteredSelectMultiple(
-            verbose_name=_('styles'),
-            is_stacked=False
-        )
-    )
-
-    def __init__(self, *args, **kwargs):
-        super(MapLayerAdminForm, self).__init__(*args, **kwargs)
-        if self.instance.pk:
-            self.fields['datasources'].initial = self.instance.datasources.all()
-            self.fields['styles'].initial = self.instance.styles.all()
-
-    def save(self, commit=True):
-        maplayer = super(MapLayerAdminForm, self).save(commit=False)
-        if commit:
-            maplayer.save()
-
-        if maplayer.pk:
-            maplayer.datasources = self.cleaned_data['datasources']
-            maplayer.styles = self.cleaned_data['styles']
-            self.save_m2m()
-
-        return maplayer
+        """
+        value = self.cleaned_data['parameter']
+        if not value == unicode(value).lower():
+            raise forms.ValidationError(
+                _("For the parameter, only use lower case letters and "
+                  "underscores."))
+        return value
