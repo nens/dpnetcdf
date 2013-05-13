@@ -248,10 +248,11 @@ class MapLayerAdmin(admin.ModelAdmin):
                             continue
                         else:
                             # create the table row definitions
-                            relative_value = (
-                                year_scenario_data[year_scenario_key] -
-                                ref_value
-                            )
+                            abs_value = year_scenario_data[year_scenario_key]
+                            if abs_value is None:
+                                # skip None values
+                                continue
+                            relative_value = abs_value - ref_value
                             t = Table()
                             # need to cast this point to a WKTSpatialElement with the
                             # RD (28992) srid for GeoAlchemy
