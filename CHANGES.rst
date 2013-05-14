@@ -2,7 +2,7 @@ Changelog of dpnetcdf
 ===================================================
 
 
-0.2 (unreleased)
+0.2 (2013-05-14)
 ----------------
 
 - Fix bug when absolute value for year/scenario is None. 
