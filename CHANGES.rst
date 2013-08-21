@@ -2,7 +2,7 @@ Changelog of dpnetcdf
 ===================================================
 
 
-0.3 (unreleased)
+0.3 (2013-08-21)
 ----------------
 
 - Upgrade the URL field to contain 255 Characters instead of 100.
