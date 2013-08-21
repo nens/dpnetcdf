@@ -35,8 +35,7 @@ class OpendapCatalog(models.Model):
     def __unicode__(self):
         if self.name:
             return self.name
-        else:
-            return urlify(self.base_url, self.service_prefix)
+        return urlify(self.base_url, self.service_prefix)
 
 
 class OpendapSubcatalog(models.Model):
@@ -70,7 +69,7 @@ class Variable(models.Model):
 
 class OpendapDataset(models.Model):
     catalog = models.ForeignKey('OpendapSubcatalog')
-    url = models.CharField(max_length=100)
+    url = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
     date = models.DateTimeField()
 

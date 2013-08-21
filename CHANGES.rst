@@ -5,15 +5,15 @@ Changelog of dpnetcdf
 0.3 (unreleased)
 ----------------
 
-- Nothing changed yet.
+- Upgrade the URL field to contain 255 Characters instead of 100.
 
 
 0.2 (2013-05-14)
 ----------------
 
-- Fix bug when absolute value for year/scenario is None. 
+- Fix bug when absolute value for year/scenario is None.
 
-- Enforce lower case map layer names (parameter field) to avoid problems with 
+- Enforce lower case map layer names (parameter field) to avoid problems with
   GeoServer.
 
 
