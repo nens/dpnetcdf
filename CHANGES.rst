@@ -5,7 +5,7 @@ Changelog of dpnetcdf
 0.4 (unreleased)
 ----------------
 
-- Nothing changed yet.
+- Add a unique constraint to Datasource to prevent duplicate entries.
 
 
 0.3 (2013-08-21)
