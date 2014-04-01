@@ -191,6 +191,7 @@ class Datasource(models.Model):
         verbose_name = _("datasource")
         verbose_name_plural = _("datasources")
         ordering = ('dataset__name',)
+        unique_together = ("dataset", "variable")
 
     def __unicode__(self):
         return "%s (%s)" % (self.dataset, self.variable)
